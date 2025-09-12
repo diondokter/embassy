@@ -2,8 +2,6 @@ use core::ptr::{addr_of_mut, NonNull};
 
 use cordyceps::sorted_list::Links;
 use cordyceps::Linked;
-#[cfg(any(feature = "scheduler-priority", feature = "scheduler-deadline"))]
-use cordyceps::SortedList;
 
 #[cfg(target_has_atomic = "ptr")]
 type TransferStack<T> = cordyceps::TransferStack<T>;
@@ -108,7 +106,7 @@ impl RunQueue {
     /// runqueue are both empty, at which point this function will return.
     #[cfg(any(feature = "scheduler-priority", feature = "scheduler-deadline"))]
     pub(crate) fn dequeue_all(&self, on_task: impl Fn(TaskRef)) {
-        let mut sorted = SortedList::<TaskHeader>::new_with_cmp(|lhs, rhs| {
+        let compare = |lhs: &TaskHeader, rhs: &TaskHeader| {
             // compare by priority first
             #[cfg(feature = "scheduler-priority")]
             {
@@ -128,28 +126,65 @@ impl RunQueue {
                 }
             }
             core::cmp::Ordering::Equal
-        });
+        };
+
+        let mut head: Option<TaskRef> = None;
+        let mut tail: Option<TaskRef> = None;
 
         loop {
             // For each loop, grab any newly pended items
-            let taken = self.stack.take_all();
 
-            // Sort these into the list - this is potentially expensive! We do an
-            // insertion sort of new items, which iterates the linked list.
-            //
-            // Something on the order of `O(n * m)`, where `n` is the number
-            // of new tasks, and `m` is the number of already pending tasks.
-            sorted.extend(taken);
+            let new_taken = self.stack.take_all();
 
-            // Pop the task with the SOONEST deadline. If there are no tasks
-            // pending, then we are done.
-            let Some(taskref) = sorted.pop_front() else {
-                return;
-            };
+            // Push the new items to the existing list
+            if let Some(new_head) = unsafe { new_taken.into_raw().map(|ptr| TaskRef::from_ptr(ptr.as_ptr())) } {
+                if head.is_none() {
+                    head = Some(new_head);
+                } else {
+                    unsafe { *tail.unwrap().header().run_queue_item.next().get() = Some(new_head.ptr) };
+                }
+            }
+
+            if head.is_none() {
+                break;
+            }
+
+            // Search for the task with the highest priority/lowest deadline
+            let mut prev: Option<TaskRef> = None;
+            let mut best = head.clone().unwrap();
+            let mut iter = head.clone().unwrap();
+            while let Some(task) = unsafe { *iter.header().run_queue_item.next().get() }
+                .map(|ptr| unsafe { TaskRef::from_ptr(ptr.as_ptr()) })
+            {
+                if compare(task.header(), best.header()).is_lt() {
+                    prev = Some(best);
+                    best = task;
+                }
+
+                iter = task;
+            }
+
+            tail = Some(iter);
+
+            // Pop the best task from the list
+            match prev {
+                Some(prev) => unsafe {
+                    let prev_next = prev.header().run_queue_item.next().get();
+                    let best_next = best.header().run_queue_item.next().get();
+
+                    *prev_next = *best_next;
+                },
+                None => unsafe {
+                    // Best is the head
+                    let next = *best.header().run_queue_item.next().get();
+                    head = next.map(|next| TaskRef::from_ptr(next.as_ptr()));
+                },
+            }
+            unsafe { *best.header().run_queue_item.next().get() = None };
 
             // We got one task, mark it as dequeued, and process the task.
-            run_dequeue(&taskref);
-            on_task(taskref);
+            run_dequeue(&best);
+            on_task(best);
         }
     }
 }
