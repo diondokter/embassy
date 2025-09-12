@@ -19,7 +19,7 @@ pub(crate) type RunQueueItem = Links<TaskHeader>;
 
 /// Implements the `Linked` trait, allowing for singly linked list usage
 /// of any of cordyceps' `TransferStack` (used for the atomic runqueue),
-/// `SortedList` (used with the DRS scheduler), or `Stack`, which is
+/// `SortedList` (used with the deadline scheduler), or `Stack`, which is
 /// popped atomically from the `TransferStack`.
 unsafe impl Linked<Links<TaskHeader>> for TaskHeader {
     type Handle = TaskRef;

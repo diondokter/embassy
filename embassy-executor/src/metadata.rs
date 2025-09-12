@@ -32,7 +32,7 @@ impl Metadata {
             // NOTE: The deadline is set to zero to allow the initializer to reside in `.bss`. This
             // will be lazily initalized in `initialize_impl`
             #[cfg(feature = "scheduler-deadline")]
-            deadline: raw::Deadline::new_unset(),
+            deadline: raw::Deadline::new(0),
         }
     }
 

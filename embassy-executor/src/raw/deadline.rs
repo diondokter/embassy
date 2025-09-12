@@ -20,10 +20,6 @@ impl Deadline {
         }
     }
 
-    pub(crate) const fn new_unset() -> Self {
-        Self::new(Self::UNSET_TICKS)
-    }
-
     pub(crate) fn set(&self, instant_ticks: u64) {
         self.instant_ticks_hi
             .store((instant_ticks >> 32) as u32, Ordering::Relaxed);
