@@ -150,14 +150,14 @@ impl RunQueue {
             }
 
             // Search for the task with the highest priority/lowest deadline
-            let mut prev: Option<TaskRef> = None;
+            let mut best_prev: Option<TaskRef> = None;
             let mut best = head.clone().unwrap();
             let mut iter = head.clone().unwrap();
             while let Some(task) = unsafe { *iter.header().run_queue_item.next().get() }
                 .map(|ptr| unsafe { TaskRef::from_ptr(ptr.as_ptr()) })
             {
                 if compare(task.header(), best.header()).is_lt() {
-                    prev = Some(best);
+                    best_prev = Some(iter);
                     best = task;
                 }
 
@@ -167,8 +167,12 @@ impl RunQueue {
             tail = Some(iter);
 
             // Pop the best task from the list
-            match prev {
+            match best_prev {
                 Some(prev) => unsafe {
+                    if tail == Some(best) {
+                        tail = Some(prev);
+                    }
+
                     let prev_next = prev.header().run_queue_item.next().get();
                     let best_next = best.header().run_queue_item.next().get();
 
