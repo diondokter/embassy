@@ -2,8 +2,8 @@
 
 use core::marker::PhantomData;
 
+use crate::pac::crc0::ctrl::{Fxor, Tcrc, Tot, Totr};
 use embassy_hal_internal::Peri;
-use mcxa_pac::crc0::ctrl::{Fxor, Tcrc, Tot, Totr};
 
 use crate::clocks::enable_and_reset;
 use crate::clocks::periph_helpers::NoConfig;
@@ -27,7 +27,7 @@ impl<'d, M: Mode> Crc<'d, M> {
 
     // Configure the underlying peripheral according to the reference manual.
     fn configure(config: Config, width: Tcrc) {
-        Self::regs().ctrl().modify(|_, w| {
+        Self::regs().ctrl().modify(|w| {
             w.fxor()
                 .variant(config.complement_out.into())
                 .totr()
@@ -42,9 +42,9 @@ impl<'d, M: Mode> Crc<'d, M> {
 
         Self::regs().gpoly32().write(|w| unsafe { w.bits(config.polynomial) });
 
-        Self::regs().ctrl().modify(|_, w| w.was().seed());
+        Self::regs().ctrl().modify(|w| w.was().seed());
         Self::regs().data32().write(|w| unsafe { w.bits(config.seed) });
-        Self::regs().ctrl().modify(|_, w| w.was().data());
+        Self::regs().ctrl().modify(|w| w.was().data());
     }
 
     fn regs() -> &'static crate::pac::crc0::RegisterBlock {

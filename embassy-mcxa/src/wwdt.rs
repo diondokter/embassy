@@ -78,7 +78,7 @@ impl<'d> Watchdog<'d> {
         // Enable WATCHDOG clock by writing to mrcc register
         // Can't use enable_and_reset API here because WWDT doesn't have a reset signal.
         let mrcc = unsafe { pac::Mrcc0::steal() };
-        mrcc.mrcc_glb_cc0().modify(|_, w| w.wwdt0().enabled());
+        mrcc.mrcc_glb_cc0().modify(|w| w.wwdt0().enabled());
 
         let timeout_cycles = (frequency as u64 * config.timeout.as_micros()) / 1_000_000;
 
@@ -143,23 +143,23 @@ impl<'d> Watchdog<'d> {
     /// Enable the watchdog timer.
     /// Function is blocking until the watchdog is actually started.
     fn enable(&self) {
-        self.info.mod_().modify(|_, w| w.wden().run());
+        self.info.mod_().modify(|w| w.wden().run());
         while self.info.tc().read().count() == 0xFF {}
     }
 
     /// Set the watchdog protection mode to flexible.
     fn set_flexible_mode(&self) {
-        self.info.mod_().modify(|_, w| w.wdprotect().flexible());
+        self.info.mod_().modify(|w| w.wdprotect().flexible());
     }
 
     /// Enable interrupt mode.
     fn enable_interrupt(&self) {
-        self.info.mod_().modify(|_, w| w.wdreset().interrupt());
+        self.info.mod_().modify(|w| w.wdreset().interrupt());
     }
 
     /// Enable reset mode.
     fn enable_reset(&self) {
-        self.info.mod_().modify(|_, w| w.wdreset().reset());
+        self.info.mod_().modify(|w| w.wdreset().reset());
     }
 
     /// Set the timeout value in clock cycles.
@@ -182,7 +182,7 @@ impl<'d> Watchdog<'d> {
 
     /// Lock the oscillator to prevent disabling or powering down the watchdog oscillator.
     fn lock_oscillator(&self) {
-        self.info.mod_().modify(|_, w| w.lock().lock());
+        self.info.mod_().modify(|w| w.lock().lock());
     }
 }
 
@@ -200,14 +200,14 @@ impl Handler<typelevel::WWDT0> for InterruptHandler {
             #[cfg(feature = "defmt")]
             defmt::trace!("WWDT0: Timeout occurred");
 
-            wwdt.mod_().modify(|_, w| w.wdtof().set_bit());
+            wwdt.mod_().modify(|w| w.wdtof().set_bit());
         }
 
         if wwdt.mod_().read().wdint().bit_is_set() {
             #[cfg(feature = "defmt")]
             defmt::trace!("WWDT0: Warning interrupt");
 
-            wwdt.mod_().modify(|_, w| w.wdint().clear_bit_by_one());
+            wwdt.mod_().modify(|w| w.wdint().clear_bit_by_one());
         }
     }
 }

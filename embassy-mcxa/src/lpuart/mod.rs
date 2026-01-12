@@ -118,7 +118,7 @@ fn perform_software_reset(info: &'static Info) {
 
 /// Disable both transmitter and receiver
 fn disable_transceiver(info: &'static Info) {
-    info.regs().ctrl().modify(|_, w| w.te().disabled().re().disabled());
+    info.regs().ctrl().modify(|w| w.te().disabled().re().disabled());
 }
 
 /// Calculate and configure baudrate settings
@@ -126,7 +126,7 @@ fn configure_baudrate(info: &'static Info, baudrate_bps: u32, clock_freq: u32) -
     let (osr, sbr) = calculate_baudrate(baudrate_bps, clock_freq)?;
 
     // Configure BAUD register
-    info.regs().baud().modify(|_, w| unsafe {
+    info.regs().baud().modify(|w| unsafe {
         // Clear and set OSR
         w.osr().bits(osr - 1);
         // Clear and set SBR
@@ -147,15 +147,15 @@ fn configure_frame_format(info: &'static Info, config: &Config) {
     // Configure stop bits
     info.regs()
         .baud()
-        .modify(|_, w| w.sbns().variant(config.stop_bits_count));
+        .modify(|w| w.sbns().variant(config.stop_bits_count));
 
     // Clear M10 for now (10-bit mode)
-    info.regs().baud().modify(|_, w| w.m10().disabled());
+    info.regs().baud().modify(|w| w.m10().disabled());
 }
 
 /// Configure control settings (parity, data bits, idle config, pin swap)
 fn configure_control_settings(info: &'static Info, config: &Config) {
-    info.regs().ctrl().modify(|_, w| {
+    info.regs().ctrl().modify(|w| {
         // Parity configuration
         let mut w = if let Some(parity) = config.parity_mode {
             w.pe().enabled().pt().variant(parity)
@@ -199,12 +199,12 @@ fn configure_fifo(info: &'static Info, config: &Config) {
     });
 
     // Enable TX/RX FIFOs
-    info.regs().fifo().modify(|_, w| w.txfe().enabled().rxfe().enabled());
+    info.regs().fifo().modify(|w| w.txfe().enabled().rxfe().enabled());
 
     // Flush FIFOs
     info.regs()
         .fifo()
-        .modify(|_, w| w.txflush().txfifo_rst().rxflush().rxfifo_rst());
+        .modify(|w| w.txflush().txfifo_rst().rxflush().rxfifo_rst());
 }
 
 /// Clear all status flags
@@ -215,7 +215,7 @@ fn clear_all_status_flags(info: &'static Info) {
 /// Configure hardware flow control if enabled
 fn configure_flow_control(info: &'static Info, enable_tx_cts: bool, enable_rx_rts: bool, config: &Config) {
     if enable_rx_rts || enable_tx_cts {
-        info.regs().modir().modify(|_, w| {
+        info.regs().modir().modify(|w| {
             let mut w = w;
 
             // Configure TX CTS
@@ -241,12 +241,12 @@ fn configure_flow_control(info: &'static Info, enable_tx_cts: bool, enable_rx_rt
 
 /// Configure bit order (MSB first or LSB first)
 fn configure_bit_order(info: &'static Info, msb_first: MsbFirst) {
-    info.regs().stat().modify(|_, w| w.msbf().variant(msb_first));
+    info.regs().stat().modify(|w| w.msbf().variant(msb_first));
 }
 
 /// Enable transmitter and/or receiver based on configuration
 fn enable_transceiver(info: &'static Info, enable_tx: bool, enable_rx: bool) {
-    info.regs().ctrl().modify(|_, w| {
+    info.regs().ctrl().modify(|w| {
         let mut w = w;
         if enable_tx {
             w = w.te().enabled();
@@ -916,7 +916,7 @@ impl<'a> LpuartTx<'a, Blocking> {
         self.info
             .regs()
             .data()
-            .modify(|_, w| unsafe { w.bits(u32::from(byte)) });
+            .modify(|w| unsafe { w.bits(u32::from(byte)) });
 
         Ok(())
     }
@@ -1143,7 +1143,7 @@ impl<'a, C: DmaChannelTrait> TxDmaGuard<'a, C> {
     /// Complete the transfer normally (don't abort on drop).
     fn complete(self) {
         // Cleanup
-        self.info.regs().baud().modify(|_, w| w.tdmae().disabled());
+        self.info.regs().baud().modify(|w| w.tdmae().disabled());
         unsafe {
             self.dma.disable_request();
             self.dma.clear_done();
@@ -1162,7 +1162,7 @@ impl<C: DmaChannelTrait> Drop for TxDmaGuard<'_, C> {
             self.dma.clear_interrupt();
         }
         // Disable UART TX DMA request
-        self.info.regs().baud().modify(|_, w| w.tdmae().disabled());
+        self.info.regs().baud().modify(|w| w.tdmae().disabled());
     }
 }
 
@@ -1182,7 +1182,7 @@ impl<'a, C: DmaChannelTrait> RxDmaGuard<'a, C> {
         // Ensure DMA writes are visible to CPU
         cortex_m::asm::dsb();
         // Cleanup
-        self.info.regs().baud().modify(|_, w| w.rdmae().disabled());
+        self.info.regs().baud().modify(|w| w.rdmae().disabled());
         unsafe {
             self.dma.disable_request();
             self.dma.clear_done();
@@ -1201,7 +1201,7 @@ impl<C: DmaChannelTrait> Drop for RxDmaGuard<'_, C> {
             self.dma.clear_interrupt();
         }
         // Disable UART RX DMA request
-        self.info.regs().baud().modify(|_, w| w.rdmae().disabled());
+        self.info.regs().baud().modify(|w| w.rdmae().disabled());
     }
 }
 
@@ -1278,7 +1278,7 @@ impl<'a, T: Instance, C: DmaChannelTrait> LpuartTxDma<'a, T, C> {
                 .setup_write_to_peripheral(buf, peri_addr, EnableInterrupt::Yes);
 
             // Enable UART TX DMA request
-            self.info.regs().baud().modify(|_, w| w.tdmae().enabled());
+            self.info.regs().baud().modify(|w| w.tdmae().enabled());
 
             // Enable DMA channel request
             self.tx_dma.enable_request();
@@ -1311,7 +1311,7 @@ impl<'a, T: Instance, C: DmaChannelTrait> LpuartTxDma<'a, T, C> {
             self.info
                 .regs()
                 .data()
-                .modify(|_, w| unsafe { w.bits(u32::from(byte)) });
+                .modify(|w| unsafe { w.bits(u32::from(byte)) });
         }
         Ok(())
     }
@@ -1397,7 +1397,7 @@ impl<'a, T: Instance, C: DmaChannelTrait> LpuartRxDma<'a, T, C> {
                 .setup_read_from_peripheral(peri_addr, buf, EnableInterrupt::Yes);
 
             // Enable UART RX DMA request
-            self.info.regs().baud().modify(|_, w| w.rdmae().enabled());
+            self.info.regs().baud().modify(|w| w.rdmae().enabled());
 
             // Enable DMA channel request
             self.rx_dma.enable_request();
@@ -1493,7 +1493,7 @@ impl<'a, T: Instance, C: DmaChannelTrait> LpuartRxDma<'a, T, C> {
             self.rx_dma.set_request_source::<T::RxDmaRequest>();
 
             // Enable RX DMA request in the LPUART peripheral
-            self.info.regs().baud().modify(|_, w| w.rdmae().enabled());
+            self.info.regs().baud().modify(|w| w.rdmae().enabled());
 
             // Set up circular DMA transfer (this also enables NVIC interrupt)
             self.rx_dma.setup_circular_read(peri_addr, buf)

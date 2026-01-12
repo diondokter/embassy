@@ -192,7 +192,7 @@ impl<'a> BufferedLpuart<'a> {
 
         // Enable interrupts for buffered operation
         cortex_m::interrupt::free(|_| {
-            info.regs().ctrl().modify(|_, w| {
+            info.regs().ctrl().modify(|w| {
                 w.rie()
                     .enabled() // RX interrupt
                     .orie()
@@ -413,7 +413,7 @@ impl<'a> BufferedLpuartTx<'a> {
                 if writer.push_one(byte) {
                     // Enable TX interrupt to start transmission
                     cortex_m::interrupt::free(|_| {
-                        self.info.regs().ctrl().modify(|_, w| w.tie().enabled());
+                        self.info.regs().ctrl().modify(|w| w.tie().enabled());
                     });
                     Poll::Ready(Ok(()))
                 } else {
@@ -444,9 +444,9 @@ impl<'a> BufferedLpuartTx<'a> {
                 // Enable appropriate interrupt
                 cortex_m::interrupt::free(|_| {
                     if !tx_empty {
-                        self.info.regs().ctrl().modify(|_, w| w.tie().enabled());
+                        self.info.regs().ctrl().modify(|w| w.tie().enabled());
                     } else {
-                        self.info.regs().ctrl().modify(|_, w| w.tcie().enabled());
+                        self.info.regs().ctrl().modify(|w| w.tcie().enabled());
                     }
                 });
                 Poll::Pending
@@ -471,7 +471,7 @@ impl<'a> BufferedLpuartTx<'a> {
         if written > 0 {
             // Enable TX interrupt to start transmission
             cortex_m::interrupt::free(|_| {
-                self.info.regs().ctrl().modify(|_, w| w.tie().enabled());
+                self.info.regs().ctrl().modify(|w| w.tie().enabled());
             });
         }
 
@@ -555,7 +555,7 @@ impl<'a> BufferedLpuartRx<'a> {
 
             // Disable RX interrupt while reading from buffer
             cortex_m::interrupt::free(|_| {
-                self.info.regs().ctrl().modify(|_, w| w.rie().disabled());
+                self.info.regs().ctrl().modify(|w| w.rie().disabled());
             });
 
             let mut reader = unsafe { self.state.rx_buf.reader() };
@@ -570,7 +570,7 @@ impl<'a> BufferedLpuartRx<'a> {
 
             // Re-enable RX interrupt
             cortex_m::interrupt::free(|_| {
-                self.info.regs().ctrl().modify(|_, w| w.rie().enabled());
+                self.info.regs().ctrl().modify(|w| w.rie().enabled());
             });
 
             if read > 0 {
@@ -592,7 +592,7 @@ impl<'a> BufferedLpuartRx<'a> {
 
         // Disable RX interrupt while reading from buffer
         cortex_m::interrupt::free(|_| {
-            self.info.regs().ctrl().modify(|_, w| w.rie().disabled());
+            self.info.regs().ctrl().modify(|w| w.rie().disabled());
         });
 
         let mut reader = unsafe { self.state.rx_buf.reader() };
@@ -606,7 +606,7 @@ impl<'a> BufferedLpuartRx<'a> {
 
         // Re-enable RX interrupt
         cortex_m::interrupt::free(|_| {
-            self.info.regs().ctrl().modify(|_, w| w.rie().enabled());
+            self.info.regs().ctrl().modify(|w| w.rie().enabled());
         });
 
         Ok(read)
@@ -714,7 +714,7 @@ impl<T: Instance> crate::interrupt::typelevel::Handler<T::Interrupt> for Buffere
                 // If buffer is empty, switch to TC interrupt or disable
                 if state.tx_buf.is_empty() {
                     cortex_m::interrupt::free(|_| {
-                        regs.ctrl().modify(|_, w| w.tie().disabled().tcie().enabled());
+                        regs.ctrl().modify(|w| w.tie().disabled().tcie().enabled());
                     });
                 }
             }
@@ -726,7 +726,7 @@ impl<T: Instance> crate::interrupt::typelevel::Handler<T::Interrupt> for Buffere
 
                 // Disable TC interrupt
                 cortex_m::interrupt::free(|_| {
-                    regs.ctrl().modify(|_, w| w.tcie().disabled());
+                    regs.ctrl().modify(|w| w.tcie().disabled());
                 });
             }
         }

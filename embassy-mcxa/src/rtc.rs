@@ -230,13 +230,13 @@ impl<'a> Rtc<'a> {
         }
 
         // RTC reset
-        info.cr().modify(|_, w| w.swr().set_bit());
-        info.cr().modify(|_, w| w.swr().clear_bit());
+        info.cr().modify(|w| w.swr().set_bit());
+        info.cr().modify(|w| w.swr().clear_bit());
         info.tsr().write(|w| unsafe { w.bits(1) });
 
-        info.cr().modify(|_, w| w.um().variant(config.update_mode));
+        info.cr().modify(|w| w.um().variant(config.update_mode));
 
-        info.tcr().modify(|_, w| unsafe {
+        info.tcr().modify(|w| unsafe {
             w.cir()
                 .bits(config.compensation_interval)
                 .tcr()
@@ -335,7 +335,7 @@ impl<'a> Rtc<'a> {
     ///
     /// Sets the Time Counter Enable (TCE) bit in the status register.
     pub fn start(&self) {
-        self.info.sr().modify(|_, w| w.tce().set_bit());
+        self.info.sr().modify(|w| w.tce().set_bit());
     }
 
     /// Stop the RTC time counter
@@ -344,7 +344,7 @@ impl<'a> Rtc<'a> {
     ///
     /// Clears the Time Counter Enable (TCE) bit in the status register.
     pub fn stop(&self) {
-        self.info.sr().modify(|_, w| w.tce().clear_bit());
+        self.info.sr().modify(|w| w.tce().clear_bit());
     }
 
     /// Enable specific RTC interrupts
@@ -363,16 +363,16 @@ impl<'a> Rtc<'a> {
     /// - Seconds Interrupt
     pub fn set_interrupt(&self, mask: u32) {
         if (RtcInterruptEnable::RTC_TIME_INVALID_INTERRUPT_ENABLE & mask) != 0 {
-            self.info.ier().modify(|_, w| w.tiie().tiie_1());
+            self.info.ier().modify(|w| w.tiie().tiie_1());
         }
         if (RtcInterruptEnable::RTC_TIME_OVERFLOW_INTERRUPT_ENABLE & mask) != 0 {
-            self.info.ier().modify(|_, w| w.toie().toie_1());
+            self.info.ier().modify(|w| w.toie().toie_1());
         }
         if (RtcInterruptEnable::RTC_ALARM_INTERRUPT_ENABLE & mask) != 0 {
-            self.info.ier().modify(|_, w| w.taie().taie_1());
+            self.info.ier().modify(|w| w.taie().taie_1());
         }
         if (RtcInterruptEnable::RTC_SECONDS_INTERRUPT_ENABLE & mask) != 0 {
-            self.info.ier().modify(|_, w| w.tsie().tsie_1());
+            self.info.ier().modify(|w| w.tsie().tsie_1());
         }
     }
 
@@ -387,16 +387,16 @@ impl<'a> Rtc<'a> {
     /// This function disables the specified interrupt types.
     pub fn disable_interrupt(&self, mask: u32) {
         if (RtcInterruptEnable::RTC_TIME_INVALID_INTERRUPT_ENABLE & mask) != 0 {
-            self.info.ier().modify(|_, w| w.tiie().tiie_0());
+            self.info.ier().modify(|w| w.tiie().tiie_0());
         }
         if (RtcInterruptEnable::RTC_TIME_OVERFLOW_INTERRUPT_ENABLE & mask) != 0 {
-            self.info.ier().modify(|_, w| w.toie().toie_0());
+            self.info.ier().modify(|w| w.toie().toie_0());
         }
         if (RtcInterruptEnable::RTC_ALARM_INTERRUPT_ENABLE & mask) != 0 {
-            self.info.ier().modify(|_, w| w.taie().taie_0());
+            self.info.ier().modify(|w| w.taie().taie_0());
         }
         if (RtcInterruptEnable::RTC_SECONDS_INTERRUPT_ENABLE & mask) != 0 {
-            self.info.ier().modify(|_, w| w.tsie().tsie_0());
+            self.info.ier().modify(|w| w.tsie().tsie_0());
         }
     }
 
@@ -406,7 +406,7 @@ impl<'a> Rtc<'a> {
     ///
     /// This function clears the Time Alarm Interrupt Enable bit.
     pub fn clear_alarm_flag(&self) {
-        self.info.ier().modify(|_, w| w.taie().clear_bit());
+        self.info.ier().modify(|w| w.taie().clear_bit());
     }
 
     /// Wait for an RTC alarm to trigger.
@@ -441,7 +441,7 @@ impl<T: Instance> Handler<T::Interrupt> for InterruptHandler<T> {
             // Check if this is actually a time alarm interrupt
             let sr = rtc.sr().read();
             if sr.taf().bit_is_set() {
-                rtc.ier().modify(|_, w| w.taie().clear_bit());
+                rtc.ier().modify(|w| w.taie().clear_bit());
                 WAKER.wake();
             }
         }

@@ -129,7 +129,7 @@ pub(crate) fn init() {
 
         // Configure DMA controller
         let dma = &(*pac::Dma0::ptr());
-        dma.mp_csr().modify(|_, w| {
+        dma.mp_csr().modify(|w| {
             w.edbg()
                 .enable()
                 .erca()
@@ -744,11 +744,11 @@ impl<C: Channel> DmaChannel<C> {
     pub unsafe fn start_transfer(&self) -> Transfer<'_> {
         // Clear any previous DONE/INT flags
         let t = self.tcd();
-        t.ch_csr().modify(|_, w| w.done().clear_bit_by_one());
+        t.ch_csr().modify(|w| w.done().clear_bit_by_one());
         t.ch_int().write(|w| w.int().clear_bit_by_one());
 
         // Enable the channel request
-        t.ch_csr().modify(|_, w| w.erq().enable());
+        t.ch_csr().modify(|w| w.erq().enable());
 
         Transfer::new(self.as_any())
     }
@@ -1474,7 +1474,7 @@ impl<C: Channel> DmaChannel<C> {
     /// The channel must be properly configured before enabling requests.
     pub unsafe fn enable_request(&self) {
         let t = self.tcd();
-        t.ch_csr().modify(|_, w| w.erq().enable());
+        t.ch_csr().modify(|w| w.erq().enable());
     }
 
     /// Disable hardware requests for this channel (ERQ=0).
@@ -1484,7 +1484,7 @@ impl<C: Channel> DmaChannel<C> {
     /// Disabling requests on an active transfer may leave the transfer incomplete.
     pub unsafe fn disable_request(&self) {
         let t = self.tcd();
-        t.ch_csr().modify(|_, w| w.erq().disable());
+        t.ch_csr().modify(|w| w.erq().disable());
     }
 
     /// Return true if the channel's DONE flag is set.
@@ -1503,7 +1503,7 @@ impl<C: Channel> DmaChannel<C> {
     /// Clearing DONE while a transfer is in progress may cause undefined behavior.
     pub unsafe fn clear_done(&self) {
         let t = self.tcd();
-        t.ch_csr().modify(|_, w| w.done().clear_bit_by_one());
+        t.ch_csr().modify(|w| w.done().clear_bit_by_one());
     }
 
     /// Clear the channel interrupt flag (CH_INT.INT).
@@ -1523,7 +1523,7 @@ impl<C: Channel> DmaChannel<C> {
     /// The channel must be properly configured with a valid TCD before triggering.
     pub unsafe fn trigger_start(&self) {
         let t = self.tcd();
-        t.tcd_csr().modify(|_, w| w.start().channel_started());
+        t.tcd_csr().modify(|w| w.start().channel_started());
     }
 
     /// Get the waker for this channel
@@ -1554,7 +1554,7 @@ impl<C: Channel> DmaChannel<C> {
         unsafe {
             let t = self.tcd();
             t.tcd_csr()
-                .modify(|_, w| w.majorelink().enable().majorlinkch().bits(link_ch as u8));
+                .modify(|w| w.majorelink().enable().majorlinkch().bits(link_ch as u8));
         }
     }
 
@@ -1568,7 +1568,7 @@ impl<C: Channel> DmaChannel<C> {
     /// depends on the linking.
     pub unsafe fn clear_major_link(&self) {
         let t = self.tcd();
-        t.tcd_csr().modify(|_, w| w.majorelink().disable());
+        t.tcd_csr().modify(|w| w.majorelink().disable());
     }
 
     /// Enable Minor Loop Linking.
@@ -1831,13 +1831,13 @@ impl<'a> Transfer<'a> {
         let t = self.channel.tcd();
 
         // Disable channel requests
-        t.ch_csr().modify(|_, w| w.erq().disable());
+        t.ch_csr().modify(|w| w.erq().disable());
 
         // Clear any pending interrupt
         t.ch_int().write(|w| w.int().clear_bit_by_one());
 
         // Clear DONE flag
-        t.ch_csr().modify(|_, w| w.done().clear_bit_by_one());
+        t.ch_csr().modify(|w| w.done().clear_bit_by_one());
 
         fence(Ordering::SeqCst);
     }
@@ -2239,11 +2239,11 @@ impl<'a, W: Word> RingBuffer<'a, W> {
 
         // Disable the channel
         let t = self.channel.tcd();
-        t.ch_csr().modify(|_, w| w.erq().disable());
+        t.ch_csr().modify(|w| w.erq().disable());
 
         // Clear flags
         t.ch_int().write(|w| w.int().clear_bit_by_one());
-        t.ch_csr().modify(|_, w| w.done().clear_bit_by_one());
+        t.ch_csr().modify(|w| w.done().clear_bit_by_one());
 
         fence(Ordering::SeqCst);
 
@@ -2339,7 +2339,7 @@ impl<C: Channel> DmaChannel<C> {
             cortex_m::asm::dsb();
 
             // Enable the channel request
-            t.ch_csr().modify(|_, w| w.erq().enable());
+            t.ch_csr().modify(|w| w.erq().enable());
 
             // Enable NVIC interrupt for this channel so async wakeups work
             self.enable_interrupt();
@@ -2515,7 +2515,7 @@ impl<'a, W: Word> ScatterGatherBuilder<'a, W> {
         cortex_m::asm::dsb();
 
         // Start the transfer
-        t.tcd_csr().modify(|_, w| w.start().channel_started());
+        t.tcd_csr().modify(|w| w.start().channel_started());
 
         Ok(Transfer::new(channel.as_any()))
     }

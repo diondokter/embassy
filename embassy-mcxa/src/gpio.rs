@@ -47,7 +47,7 @@ fn irq_handler(port_index: usize, gpio_base: *const crate::pac::gpio0::RegisterB
     for pin in BitIter(isfr) {
         // Clear all pending interrupts
         gpio.isfr0().write(|w| unsafe { w.bits(1 << pin) });
-        gpio.icr(pin).modify(|_, w| w.irqc().irqc0()); // Disable interrupt
+        gpio.icr(pin).modify(|w| w.irqc().irqc0()); // Disable interrupt
 
         // Wake the corresponding port waker
         if let Some(w) = PORT_WAIT_MAPS.get(port_index) {
@@ -294,27 +294,27 @@ impl SealedPin for AnyPin {
     }
 
     fn set_function(&self, function: Mux) {
-        self.pcr_reg().modify(|_, w| w.mux().variant(function));
+        self.pcr_reg().modify(|w| w.mux().variant(function));
     }
 
     fn set_pull(&self, pull: Pull) {
         let (pull_enable, pull_select) = pull.into();
-        self.pcr_reg().modify(|_, w| {
+        self.pcr_reg().modify(|w| {
             w.pe().variant(pull_enable);
             w.ps().variant(pull_select)
         });
     }
 
     fn set_drive_strength(&self, strength: Dse) {
-        self.pcr_reg().modify(|_, w| w.dse().variant(strength));
+        self.pcr_reg().modify(|w| w.dse().variant(strength));
     }
 
     fn set_slew_rate(&self, slew_rate: Sre) {
-        self.pcr_reg().modify(|_, w| w.sre().variant(slew_rate));
+        self.pcr_reg().modify(|w| w.sre().variant(slew_rate));
     }
 
     fn set_enable_input_buffer(&self) {
-        self.pcr_reg().modify(|_, w| w.ibe().ibe1());
+        self.pcr_reg().modify(|w| w.ibe().ibe1());
     }
 }
 
@@ -347,7 +347,7 @@ macro_rules! impl_pin {
                 fn set_function(&self, function: Mux) {
                     unsafe {
                         let port_reg = &*crate::pac::[<Port $port>]::ptr();
-                        port_reg.[<pcr $pin>]().modify(|_, w| {
+                        port_reg.[<pcr $pin>]().modify(|w| {
                             w.mux().variant(function)
                         });
                     }
@@ -356,7 +356,7 @@ macro_rules! impl_pin {
                 fn set_pull(&self, pull: Pull) {
                     let port_reg = unsafe {&*crate::pac::[<Port $port>]::ptr()};
                     let (pull_enable, pull_select) = pull.into();
-                    port_reg.[<pcr $pin>]().modify(|_, w| {
+                    port_reg.[<pcr $pin>]().modify(|w| {
                         w.pe().variant(pull_enable);
                         w.ps().variant(pull_select)
                     });
@@ -364,17 +364,17 @@ macro_rules! impl_pin {
 
                 fn set_drive_strength(&self, strength: Dse) {
                     let port_reg = unsafe {&*crate::pac::[<Port $port>]::ptr()};
-                    port_reg.[<pcr $pin>]().modify(|_, w| w.dse().variant(strength));
+                    port_reg.[<pcr $pin>]().modify(|w| w.dse().variant(strength));
                 }
 
                 fn set_slew_rate(&self, slew_rate: Sre) {
                     let port_reg = unsafe {&*crate::pac::[<Port $port>]::ptr()};
-                    port_reg.[<pcr $pin>]().modify(|_, w| w.sre().variant(slew_rate));
+                    port_reg.[<pcr $pin>]().modify(|w| w.sre().variant(slew_rate));
                 }
 
                 fn set_enable_input_buffer(&self) {
                     let port_reg = unsafe {&*crate::pac::[<Port $port>]::ptr()};
-                    port_reg.[<pcr $pin>]().modify(|_, w| w.ibe().ibe1());
+                    port_reg.[<pcr $pin>]().modify(|w| w.ibe().ibe1());
                 }
             }
 
@@ -715,10 +715,7 @@ impl<'d> Flex<'d> {
         self.pin.gpio().icr(self.pin.pin()).write(|w| w.isf().isf1());
 
         // Pin interrupt configuration
-        self.pin
-            .gpio()
-            .icr(self.pin.pin())
-            .modify(|_, w| w.irqc().variant(level));
+        self.pin.gpio().icr(self.pin.pin()).modify(|w| w.irqc().variant(level));
 
         // Finally, we can await the matching call to `.wake()` from the interrupt.
         //

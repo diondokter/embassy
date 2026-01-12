@@ -246,7 +246,7 @@ impl<'a> Adc<'a, Blocking> {
         self.info
             .regs()
             .fctrl0()
-            .modify(|_r, w| unsafe { w.fwmark().bits(watermark) });
+            .modify(|w| unsafe { w.fwmark().bits(watermark) });
         Ok(())
     }
 
@@ -304,7 +304,7 @@ impl<'a> Adc<'a, Blocking> {
     ///
     /// Clears all pending conversion results from the FIFO.
     pub fn do_reset_fifo(&self) {
-        self.info.regs().ctrl().modify(|_, w| w.rstfifo0().trigger_reset());
+        self.info.regs().ctrl().modify(|w| w.rstfifo0().trigger_reset());
     }
 
     /// Get conversion result from FIFO.
@@ -366,7 +366,7 @@ impl<'a> Adc<'a, Async> {
         _ = adc.set_conv_trigger_config_inner(0, &cfg);
 
         // We always set the watermark to 0 (trigger when 1 is available)
-        adc.info.regs().fctrl0().modify(|_r, w| unsafe { w.fwmark().bits(0) });
+        adc.info.regs().fctrl0().modify(|w| unsafe { w.fwmark().bits(0) });
 
         Ok(adc)
     }
@@ -375,20 +375,20 @@ impl<'a> Adc<'a, Async> {
     pub fn set_averages(&mut self, avgs: Avgs) {
         // TODO: we should probably return a result or wait for idle?
         // "A write to a CMD buffer while that CMD buffer is controlling the ADC operation may cause unpredictable behavior."
-        self.info.regs().cmdh1().modify(|_r, w| w.avgs().variant(avgs));
+        self.info.regs().cmdh1().modify(|w| w.avgs().variant(avgs));
     }
 
     /// Set the sample time
     pub fn set_sample_time(&mut self, st: Sts) {
         // TODO: we should probably return a result or wait for idle?
         // "A write to a CMD buffer while that CMD buffer is controlling the ADC operation may cause unpredictable behavior."
-        self.info.regs().cmdh1().modify(|_r, w| w.sts().variant(st));
+        self.info.regs().cmdh1().modify(|w| w.sts().variant(st));
     }
 
     pub fn set_resolution(&mut self, mode: ConvMode) {
         // TODO: we should probably return a result or wait for idle?
         // "A write to a CMD buffer while that CMD buffer is controlling the ADC operation may cause unpredictable behavior."
-        self.info.regs().cmdl1().modify(|_r, w| w.mode().variant(mode));
+        self.info.regs().cmdl1().modify(|w| w.mode().variant(mode));
     }
 
     fn wait_idle(&mut self) -> impl Future<Output = core::result::Result<(), maitake_sync::Closed>> + use<'_> {
@@ -415,10 +415,10 @@ impl<'a> Adc<'a, Async> {
         _ = self.wait_idle().await;
 
         // Clear the fifo
-        self.info.regs().ctrl().modify(|_, w| w.rstfifo0().trigger_reset());
+        self.info.regs().ctrl().modify(|w| w.rstfifo0().trigger_reset());
 
         // Trigger a new conversion
-        self.info.regs().ie().modify(|_r, w| w.fwmie0().set_bit());
+        self.info.regs().ie().modify(|w| w.fwmie0().set_bit());
         self.info.regs().swtrig().write(|w| w.swt0().set_bit());
 
         // Wait for completion
@@ -446,20 +446,20 @@ impl<'a, M: Mode> Adc<'a, M> {
         pin.mux();
 
         /* Reset the module. */
-        adc.ctrl().modify(|_, w| w.rst().held_in_reset());
-        adc.ctrl().modify(|_, w| w.rst().released_from_reset());
+        adc.ctrl().modify(|w| w.rst().held_in_reset());
+        adc.ctrl().modify(|w| w.rst().released_from_reset());
 
-        adc.ctrl().modify(|_, w| w.rstfifo0().trigger_reset());
+        adc.ctrl().modify(|w| w.rstfifo0().trigger_reset());
 
         /* Disable the module before setting configuration. */
-        adc.ctrl().modify(|_, w| w.adcen().disabled());
+        adc.ctrl().modify(|w| w.adcen().disabled());
 
         /* Configure the module generally. */
-        adc.ctrl().modify(|_, w| w.dozen().bit(config.enable_in_doze_mode));
+        adc.ctrl().modify(|w| w.dozen().bit(config.enable_in_doze_mode));
 
         /* Set calibration average mode. */
         adc.ctrl()
-            .modify(|_, w| w.cal_avgs().variant(config.conversion_average_mode));
+            .modify(|w| w.cal_avgs().variant(config.conversion_average_mode));
 
         adc.cfg().write(|w| unsafe {
             w.pwren().bit(config.enable_analog_preliminary);
@@ -507,7 +507,7 @@ impl<'a, M: Mode> Adc<'a, M> {
 
         if config.enable_conv_pause {
             adc.pause()
-                .modify(|_, w| unsafe { w.pauseen().enabled().pausedly().bits(config.conv_pause_delay) });
+                .modify(|w| unsafe { w.pauseen().enabled().pausedly().bits(config.conv_pause_delay) });
         } else {
             adc.pause().write(|w| unsafe { w.bits(0) });
         }
@@ -515,7 +515,7 @@ impl<'a, M: Mode> Adc<'a, M> {
         adc.fctrl0().write(|w| unsafe { w.fwmark().bits(0) });
 
         // Enable ADC
-        adc.ctrl().modify(|_, w| w.adcen().enabled());
+        adc.ctrl().modify(|w| w.adcen().enabled());
 
         Ok(Self {
             _inst: PhantomData,
@@ -531,7 +531,7 @@ impl<'a, M: Mode> Adc<'a, M> {
         self.info
             .regs()
             .ctrl()
-            .modify(|_, w| w.calofs().offset_calibration_request_pending());
+            .modify(|w| w.calofs().offset_calibration_request_pending());
 
         // Wait for calibration to complete (polling status register)
         while self.info.regs().stat().read().cal_rdy().is_not_set() {}
@@ -567,7 +567,7 @@ impl<'a, M: Mode> Adc<'a, M> {
         self.info
             .regs()
             .ctrl()
-            .modify(|_, w| w.cal_req().calibration_request_pending());
+            .modify(|w| w.cal_req().calibration_request_pending());
 
         while self.info.regs().gcc0().read().rdy().is_gain_cal_not_valid() {}
 
@@ -584,7 +584,7 @@ impl<'a, M: Mode> Adc<'a, M> {
             .gcr0()
             .write(|w| unsafe { w.bits(self.get_gain_conv_result(gcra)) });
 
-        self.info.regs().gcr0().modify(|_, w| w.rdy().set_bit());
+        self.info.regs().gcr0().modify(|w| w.rdy().set_bit());
 
         // Wait for calibration to complete (polling status register)
         while self.info.regs().stat().read().cal_rdy().is_not_set() {}
@@ -674,7 +674,7 @@ impl<'a, M: Mode> Adc<'a, M> {
 
 impl<T: Instance> Handler<T::Interrupt> for InterruptHandler<T> {
     unsafe fn on_interrupt() {
-        T::info().regs().ie().modify(|_r, w| w.fwmie0().clear_bit());
+        T::info().regs().ie().modify(|w| w.fwmie0().clear_bit());
         T::info().wait_cell().wake();
     }
 }

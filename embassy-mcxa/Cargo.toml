@@ -39,7 +39,7 @@ embedded-hal-nb = { version = "1.0" }
 embedded-io = "0.7"
 embedded-io-async = { version = "0.7.0" }
 heapless = "0.8"
-mcxa-pac = { version = "0.1.0", features = ["rt", "critical-section"] }
+nxp-pac = { path = "/home/wouter/sarif/nxp-pac", features = ["rt", "mcxa256"] }
 nb = "1.1.0"
 paste = "1.0.15"
 maitake-sync = { version = "0.2.2", default-features = false, features = ["critical-section", "no-cache-pad"] }
@@ -57,7 +57,7 @@ default = ["rt"]
 
 # Base defmt feature enables core + panic handler
 # Use with one logger feature: defmt-rtt (preferred) or defmt-uart (fallback)
-defmt = ["dep:defmt", "mcxa-pac/defmt"]
+defmt = ["dep:defmt", "nxp-pac/defmt"]
 
 unstable-pac = []
 

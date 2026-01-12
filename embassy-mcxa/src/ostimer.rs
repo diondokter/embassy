@@ -88,7 +88,7 @@ impl OsTimer {
         interrupt::OS_EVENT.disable();
 
         // Make sure interrupt is masked
-        os().osevent_ctrl().modify(|_, w| w.ostimer_intena().clear_bit());
+        os().osevent_ctrl().modify(|w| w.ostimer_intena().clear_bit());
 
         // Default to the end of time
         os().match_l().write(|w| unsafe { w.bits(0xffff_ffff) });
@@ -108,7 +108,7 @@ impl OsTimer {
 
         let t = self.now();
         if timestamp <= t {
-            os().osevent_ctrl().modify(|_, w| w.ostimer_intena().clear_bit());
+            os().osevent_ctrl().modify(|w| w.ostimer_intena().clear_bit());
             alarm.timestamp.set(u64::MAX);
             return false;
         }
@@ -119,7 +119,7 @@ impl OsTimer {
             .write(|w| unsafe { w.bits(gray_timestamp as u32 & 0xffff_ffff) });
         os().match_h()
             .write(|w| unsafe { w.bits((gray_timestamp >> 32) as u32) });
-        os().osevent_ctrl().modify(|_, w| w.ostimer_intena().set_bit());
+        os().osevent_ctrl().modify(|w| w.ostimer_intena().set_bit());
 
         true
     }
@@ -135,7 +135,7 @@ impl OsTimer {
         critical_section::with(|cs| {
             if os().osevent_ctrl().read().ostimer_intrflag().bit_is_set() {
                 os().osevent_ctrl()
-                    .modify(|_, w| w.ostimer_intena().clear_bit().ostimer_intrflag().clear_bit_by_one());
+                    .modify(|w| w.ostimer_intena().clear_bit().ostimer_intrflag().clear_bit_by_one());
                 self.trigger_alarm(cs);
             }
         });

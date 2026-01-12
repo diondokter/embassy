@@ -2,10 +2,10 @@
 
 use core::marker::PhantomData;
 
+use crate::pac::trng0::osc2_ctl::TrngEntCtl;
 use embassy_hal_internal::Peri;
 use embassy_hal_internal::interrupt::InterruptExt;
 use maitake_sync::WaitCell;
-use mcxa_pac::trng0::osc2_ctl::TrngEntCtl;
 
 use crate::clocks::enable_and_reset;
 use crate::clocks::periph_helpers::NoConfig;
@@ -54,7 +54,7 @@ impl<'d, M: Mode> Trng<'d, M> {
     fn configure(config: Config) {
         regs()
             .mctl()
-            .modify(|_, w| w.rst_def().set_bit().prgm().enable().err().clear_bit_by_one());
+            .modify(|w| w.rst_def().set_bit().prgm().enable().err().clear_bit_by_one());
 
         regs().scml().write(|w| unsafe {
             w.mono_max()
@@ -130,7 +130,7 @@ impl<'d, M: Mode> Trng<'d, M> {
 
         regs()
             .mctl()
-            .modify(|_, w| w.dis_slf_tst().variant(config.self_test.into()));
+            .modify(|w| w.dis_slf_tst().variant(config.self_test.into()));
 
         regs().sdctl().write(|w| unsafe {
             w.samp_size()
@@ -141,9 +141,9 @@ impl<'d, M: Mode> Trng<'d, M> {
 
         regs()
             .osc2_ctl()
-            .modify(|_, w| w.trng_ent_ctl().variant(config.osc_mode.into()));
+            .modify(|w| w.trng_ent_ctl().variant(config.osc_mode.into()));
 
-        regs().mctl().modify(|_, w| w.prgm().disable());
+        regs().mctl().modify(|w| w.prgm().disable());
 
         let _ = regs().ent(7).read().bits();
 
@@ -151,17 +151,17 @@ impl<'d, M: Mode> Trng<'d, M> {
     }
 
     fn start() {
-        regs().mctl().modify(|_, w| w.trng_acc().set_bit());
+        regs().mctl().modify(|w| w.trng_acc().set_bit());
     }
 
     fn stop() {
-        regs().mctl().modify(|_, w| w.trng_acc().clear_bit());
+        regs().mctl().modify(|w| w.trng_acc().clear_bit());
     }
 
     fn blocking_wait_for_generation() {
         while regs().mctl().read().ent_val().bit_is_clear() {
             if regs().mctl().read().err().bit_is_set() {
-                regs().mctl().modify(|_, w| w.err().clear_bit_by_one());
+                regs().mctl().modify(|w| w.err().clear_bit_by_one());
             }
         }
     }

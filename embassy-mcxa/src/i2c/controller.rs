@@ -5,7 +5,7 @@ use core::marker::PhantomData;
 
 use embassy_hal_internal::Peri;
 use embassy_hal_internal::drop::OnDrop;
-use mcxa_pac::lpi2c0::mtdr::Cmd;
+use crate::pac::lpi2c0::mtdr::Cmd;
 
 use super::{Async, Blocking, Error, Info, Instance, InterruptHandler, Mode, Result, SclPin, SdaPin};
 use crate::clocks::periph_helpers::{Div4, Lpi2cClockSel, Lpi2cConfig};
@@ -118,27 +118,27 @@ impl<'d, M: Mode> I2c<'d, M> {
 
     fn set_configuration(&self, config: &Config) -> Result<()> {
         // Disable the controller.
-        critical_section::with(|_| self.info.regs().mcr().modify(|_, w| w.men().disabled()));
+        critical_section::with(|_| self.info.regs().mcr().modify(|w| w.men().disabled()));
 
         // Soft-reset the controller, read and write FIFOs.
         self.reset_fifos();
         critical_section::with(|_| {
-            self.info.regs().mcr().modify(|_, w| w.rst().reset());
+            self.info.regs().mcr().modify(|w| w.rst().reset());
             // According to Reference Manual section 40.7.1.4, "There
             // is no minimum delay required before clearing the
             // software reset", therefore we clear it immediately.
-            self.info.regs().mcr().modify(|_, w| w.rst().not_reset());
+            self.info.regs().mcr().modify(|w| w.rst().not_reset());
 
             self.info
                 .regs()
                 .mcr()
-                .modify(|_, w| w.dozen().clear_bit().dbgen().clear_bit());
+                .modify(|w| w.dozen().clear_bit().dbgen().clear_bit());
         });
 
         let (clklo, clkhi, sethold, datavd) = config.speed.into();
 
         critical_section::with(|_| {
-            self.info.regs().mccr0().modify(|_, w| unsafe {
+            self.info.regs().mccr0().modify(|w| unsafe {
                 w.clklo()
                     .bits(clklo)
                     .clkhi()
@@ -151,7 +151,7 @@ impl<'d, M: Mode> I2c<'d, M> {
         });
 
         // Enable the controller.
-        critical_section::with(|_| self.info.regs().mcr().modify(|_, w| w.men().enabled()));
+        critical_section::with(|_| self.info.regs().mcr().modify(|w| w.men().enabled()));
 
         // Clear all flags
         self.info.regs().msr().write(|w| {
@@ -195,7 +195,7 @@ impl<'d, M: Mode> I2c<'d, M> {
     /// Resets both TX and RX FIFOs dropping their contents.
     fn reset_fifos(&self) {
         critical_section::with(|_| {
-            self.info.regs().mcr().modify(|_, w| w.rtf().reset().rrf().reset());
+            self.info.regs().mcr().modify(|w| w.rtf().reset().rrf().reset());
         });
     }
 
