@@ -6,7 +6,7 @@
 // #![doc = document_features::document_features!(feature_label = r#"<span class="stab portability"><code>{feature}</code></span>"#)]
 
 pub mod clocks; // still provide clock helpers
-// pub mod dma;
+pub mod dma;
 // pub mod gpio;
 
 // pub mod adc;
