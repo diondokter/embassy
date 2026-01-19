@@ -18,7 +18,7 @@ pub mod dma;
 // pub mod ostimer;
 // pub mod reset_reason;
 // pub mod rtc;
-// pub mod trng;
+pub mod trng;
 pub mod wwdt;
 
 use crate::interrupt::InterruptExt;

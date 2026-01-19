@@ -2,7 +2,6 @@
 
 use core::marker::PhantomData;
 
-use crate::pac::trng0::osc2_ctl::TrngEntCtl;
 use embassy_hal_internal::Peri;
 use embassy_hal_internal::interrupt::InterruptExt;
 use maitake_sync::WaitCell;
@@ -52,100 +51,72 @@ impl<'d, M: Mode> Trng<'d, M> {
     }
 
     fn configure(config: Config) {
-        regs()
-            .mctl()
-            .modify(|w| w.rst_def().set_bit().prgm().enable().err().clear_bit_by_one());
-
-        regs().scml().write(|w| unsafe {
-            w.mono_max()
-                .bits(config.monobit_limit_max)
-                .mono_rng()
-                .bits(config.monobit_limit_range)
+        regs().mctl().modify(|w| {
+            w.set_rst_def(true);
+            w.set_prgm(true);
+            w.set_err(true)
         });
 
-        regs().scr1l().write(|w| unsafe {
-            w.run1_max()
-                .bits(config.run_length1_limit_max)
-                .run1_rng()
-                .bits(config.run_length1_limit_range)
+        regs().scml().write(|w| {
+            w.set_mono_max(config.monobit_limit_max);
+            w.set_mono_rng(config.monobit_limit_range);
         });
 
-        regs().scr2l().write(|w| unsafe {
-            w.run2_max()
-                .bits(config.run_length2_limit_max)
-                .run2_rng()
-                .bits(config.run_length2_limit_range)
+        regs().scr1l().write(|w| {
+            w.set_run1_max(config.run_length1_limit_max);
+            w.set_run1_rng(config.run_length1_limit_range);
         });
 
-        regs().scr3l().write(|w| unsafe {
-            w.run3_max()
-                .bits(config.run_length3_limit_max)
-                .run3_rng()
-                .bits(config.run_length3_limit_range)
+        regs().scr2l().write(|w| {
+            w.set_run2_max(config.run_length2_limit_max);
+            w.set_run2_rng(config.run_length2_limit_range);
         });
 
-        regs().scr4l().write(|w| unsafe {
-            w.run4_max()
-                .bits(config.run_length4_limit_max)
-                .run4_rng()
-                .bits(config.run_length4_limit_range)
+        regs().scr3l().write(|w| {
+            w.set_run3_max(config.run_length3_limit_max);
+            w.set_run3_rng(config.run_length3_limit_range);
         });
 
-        regs().scr5l().write(|w| unsafe {
-            w.run5_max()
-                .bits(config.run_length5_limit_max)
-                .run5_rng()
-                .bits(config.run_length5_limit_range)
+        regs().scr4l().write(|w| {
+            w.set_run4_max(config.run_length4_limit_max);
+            w.set_run4_rng(config.run_length4_limit_range);
         });
 
-        regs().scr6pl().write(|w| unsafe {
-            w.run6p_max()
-                .bits(config.run_length6_limit_max)
-                .run6p_rng()
-                .bits(config.run_length6_limit_range)
+        regs().scr5l().write(|w| {
+            w.set_run5_max(config.run_length5_limit_max);
+            w.set_run5_rng(config.run_length5_limit_range);
         });
 
-        regs()
-            .pkrmax()
-            .write(|w| unsafe { w.pkr_max().bits(config.poker_limit_max) });
-
-        regs()
-            .frqmax()
-            .write(|w| unsafe { w.frq_max().bits(config.freq_counter_max) });
-
-        regs()
-            .frqmin()
-            .write(|w| unsafe { w.frq_min().bits(config.freq_counter_min) });
-
-        regs()
-            .sblim()
-            .write(|w| unsafe { w.sb_lim().bits(config.sparse_bit_limit) });
-
-        regs().scmisc().write(|w| unsafe {
-            w.lrun_max()
-                .bits(config.long_run_limit_max)
-                .rty_ct()
-                .bits(config.retry_count)
+        regs().scr6pl().write(|w| {
+            w.set_run6p_max(config.run_length6_limit_max);
+            w.set_run6p_rng(config.run_length6_limit_range);
         });
 
-        regs()
-            .mctl()
-            .modify(|w| w.dis_slf_tst().variant(config.self_test.into()));
+        regs().pkrmax().write(|w| w.set_pkr_max(config.poker_limit_max));
 
-        regs().sdctl().write(|w| unsafe {
-            w.samp_size()
-                .bits(config.sample_size)
-                .ent_dly()
-                .bits(config.entropy_delay)
+        regs().frqmax().write(|w| w.set_frq_max(config.freq_counter_max));
+
+        regs().frqmin().write(|w| w.set_frq_min(config.freq_counter_min));
+
+        regs().sblim().write(|w| w.set_sb_lim(config.sparse_bit_limit));
+
+        regs().scmisc().write(|w| {
+            w.set_lrun_max(config.long_run_limit_max);
+            w.set_rty_ct(config.retry_count);
         });
 
-        regs()
-            .osc2_ctl()
-            .modify(|w| w.trng_ent_ctl().variant(config.osc_mode.into()));
+        regs().mctl().modify(|w| w.set_dis_slf_tst(config.self_test.into()));
 
-        regs().mctl().modify(|w| w.prgm().disable());
+        regs().sdctl().write(|w| {
+            w.set_samp_size(config.sample_size);
+            w.set_ent_dly(config.entropy_delay);
+        });
 
-        let _ = regs().ent(7).read().bits();
+        regs().osc2_ctl().modify(|w| w.set_trng_ent_ctl(config.osc_mode.into()));
+
+        regs().mctl().modify(|w| w.set_prgm(false));
+
+        let _ = regs().ent(7).read();
 
         Self::start();
     }
@@ -448,8 +419,8 @@ impl<M: Mode> Drop for Trng<'_, M> {
     }
 }
 
-fn regs() -> &'static crate::pac::trng0::RegisterBlock {
-    unsafe { &*crate::pac::Trng0::ptr() }
+fn regs() -> crate::pac::trng0::Trng0 {
+    crate::pac::TRNG0
 }
 
 /// Trng errors
