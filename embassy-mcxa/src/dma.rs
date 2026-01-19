@@ -111,7 +111,7 @@ use embassy_hal_internal::PeripheralType;
 use embassy_sync::waitqueue::AtomicWaker;
 use nxp_pac::dma0::vals::Halt;
 use nxp_pac::edma_0_tcd0::regs::{TcdAttr, TcdBiterElinkno, TcdCiterElinkno, TcdCsr};
-use nxp_pac::edma_0_tcd0::vals::{Bwc, Dreq, Esg, Int, Ssize, Start};
+use nxp_pac::edma_0_tcd0::vals::{Bwc, Dreq, Esg, Ssize, Start};
 
 use crate::clocks::Gate;
 use crate::pac;
@@ -724,7 +724,7 @@ impl<C: Channel> DmaChannel<C> {
         // ES: Resets to all zeroes (disabled), "err" is cleared by writing 1
         t.ch_es().write(|w| w.set_err(true));
         // INT: Resets to all zeroes (disabled), "int" is cleared by writing 1
-        t.ch_int().write(|w| w.set_int(Int::INTERRUPT_ACTIVE));
+        t.ch_int().write(|w| w.set_int(true));
     }
 
     /// Start an async transfer.
@@ -742,7 +742,7 @@ impl<C: Channel> DmaChannel<C> {
         // Clear any previous DONE/INT flags
         let t = self.tcd();
         t.ch_csr().modify(|w| w.set_done(true));
-        t.ch_int().write(|w| w.set_int(Int::INTERRUPT_ACTIVE));
+        t.ch_int().write(|w| w.set_int(true));
 
         // Enable the channel request
         t.ch_csr().modify(|w| w.set_erq(true));
@@ -1455,7 +1455,7 @@ impl<C: Channel> DmaChannel<C> {
     /// Must be called from the correct interrupt context or with interrupts disabled.
     pub unsafe fn clear_interrupt(&self) {
         let t = self.tcd();
-        t.ch_int().write(|w| w.set_int(Int::INTERRUPT_ACTIVE));
+        t.ch_int().write(|w| w.set_int(true));
     }
 
     /// Trigger a software start for this channel.
@@ -1768,7 +1768,7 @@ impl<'a> Transfer<'a> {
         t.ch_csr().modify(|w| w.set_erq(false));
 
         // Clear any pending interrupt
-        t.ch_int().write(|w| w.set_int(Int::INTERRUPT_ACTIVE));
+        t.ch_int().write(|w| w.set_int(true));
 
         // Clear DONE flag
         t.ch_csr().modify(|w| w.set_done(true));
@@ -2176,7 +2176,7 @@ impl<'a, W: Word> RingBuffer<'a, W> {
         t.ch_csr().modify(|w| w.set_erq(false));
 
         // Clear flags
-        t.ch_int().write(|w| w.set_int(Int::INTERRUPT_ACTIVE));
+        t.ch_int().write(|w| w.set_int(true));
         t.ch_csr().modify(|w| w.set_done(true));
 
         fence(Ordering::SeqCst);
@@ -2502,7 +2502,7 @@ pub unsafe fn on_interrupt(ch_index: usize) {
     }
 
     // Clear INT flag
-    t.ch_int().write(|w| w.set_int(Int::INTERRUPT_ACTIVE));
+    t.ch_int().write(|w| w.set_int(true));
 
     // If DONE is set, this is a complete-transfer interrupt
     // Only wake the full-transfer waker when the transfer is actually complete
