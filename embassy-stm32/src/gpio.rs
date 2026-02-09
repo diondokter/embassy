@@ -30,6 +30,22 @@ impl<'d> Flex<'d> {
         Self { pin: pin.into() }
     }
 
+    /// Reborrow into a "child" Flex.
+    ///
+    /// `self` will stay borrowed until the child Peripheral is dropped.
+    pub fn reborrow(&mut self) -> Flex<'_> {
+        Flex {
+            pin: self.pin.reborrow(),
+        }
+    }
+
+    /// Unsafely clone (duplicate) a Flex.
+    pub unsafe fn clone_unchecked(&self) -> Flex<'d> {
+        Flex {
+            pin: self.pin.clone_unchecked(),
+        }
+    }
+
     /// Put the pin into input mode.
     ///
     /// The internal weak pull-up and pull-down resistors will be enabled according to `pull`.
@@ -233,6 +249,7 @@ impl<'d> Flex<'d> {
 impl<'d> Drop for Flex<'d> {
     #[inline]
     fn drop(&mut self) {
+        trace!("Dropping pin {}", self.pin);
         critical_section::with(|_| {
             self.pin.set_as_disconnected();
         });
@@ -672,7 +689,7 @@ fn set_speed(pin_port: PinNumber, speed: Speed) {
 }
 
 #[inline(never)]
-fn set_as_analog(pin_port: PinNumber) {
+pub(crate) fn set_as_analog(pin_port: PinNumber) {
     let pin = unsafe { AnyPin::steal(pin_port) };
     let r = pin.block();
     let n = pin._pin() as usize;
@@ -806,15 +823,7 @@ pub(crate) trait SealedPin {
 ///
 /// Some chips have a total number of ports that exceeds 8, a larger integer
 /// is needed to hold the total pin number `(ports * number)`.
-#[cfg(not(stm32n6))]
 pub type PinNumber = u8;
-
-/// GPIO pin number type.
-///
-/// Some chips have a total number of ports that exceeds 8, a larger integer
-/// is needed to hold the total pin number `(ports * number)`.
-#[cfg(stm32n6)]
-pub type PinNumber = u16;
 
 /// Pin that can be used to configure an [ExtiInput](crate::exti::ExtiInput). This trait is lost when converting to [AnyPin].
 #[cfg(feature = "exti")]
@@ -852,20 +861,36 @@ impl AnyPin {
     ///
     /// `pin_port` is `port_num * 16 + pin_num`, where `port_num` is 0 for port `A`, 1 for port `B`, etc...
     #[inline]
-    pub unsafe fn steal(pin_port: PinNumber) -> Peri<'static, Self> {
+    pub const unsafe fn steal(pin_port: PinNumber) -> Peri<'static, Self> {
         Peri::new_unchecked(Self { pin_port })
     }
 
     #[inline]
-    fn _port(&self) -> PinNumber {
+    const fn _port(&self) -> PinNumber {
         self.pin_port / 16
     }
 
     /// Get the GPIO register block for this pin.
     #[cfg(feature = "unstable-pac")]
     #[inline]
-    pub fn block(&self) -> gpio::Gpio {
+    pub const fn block(&self) -> gpio::Gpio {
         crate::_generated::gpio_block(self._port() as _)
+    }
+}
+
+impl core::fmt::Display for AnyPin {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let port = char::from(b'A' + self.port());
+        let pin = self.pin();
+        write!(f, "P{port}{pin}")
+    }
+}
+#[cfg(feature = "defmt")]
+impl defmt::Format for AnyPin {
+    fn format(&self, f: defmt::Formatter) {
+        let port = char::from(b'A' + self.port());
+        let pin = self.pin();
+        defmt::write!(f, "P{}{}", port, pin)
     }
 }
 

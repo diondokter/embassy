@@ -271,6 +271,7 @@ impl<'d> UartTx<'d, Async> {
                 buffer,
                 self.info.regs.uartdr().as_ptr() as *mut _,
                 self.info.tx_dreq.into(),
+                false,
             )
         };
         transfer.await;
@@ -455,6 +456,7 @@ impl<'d> UartRx<'d, Async> {
                 self.info.regs.uartdr().as_ptr() as *const _,
                 buffer,
                 self.info.rx_dreq.into(),
+                false,
             )
         };
 
@@ -622,6 +624,7 @@ impl<'d> UartRx<'d, Async> {
                     self.info.regs.uartdr().as_ptr() as *const _,
                     sbuffer,
                     self.info.rx_dreq.into(),
+                    false,
                 )
             };
 
@@ -676,7 +679,7 @@ impl<'d> UartRx<'d, Async> {
                 let eval = sval + buffer.len();
 
                 // This is the address where the DMA would write to next
-                let next_addr = self.rx_dma.as_mut().unwrap().regs().write_addr().read() as usize;
+                let next_addr = self.rx_dma.as_mut().unwrap().write_addr() as usize;
 
                 // If we DON'T end up inside the range, something has gone really wrong.
                 // Note that it's okay that `eval` is one past the end of the slice, as

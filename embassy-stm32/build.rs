@@ -895,10 +895,13 @@ fn main() {
     clock_gen.clock_names.insert("sys".to_string());
     clock_gen.clock_names.insert("rtc".to_string());
 
-    // STM32F4 SPI in I2S mode receives a clock input from the dedicated I2S PLL.
+    // STM32F2/F4/F7 SPI in I2S mode receives a clock input from the dedicated I2S PLL.
     // For this, there is an additional clock MUX, which is not present in other
     // peripherals and does not fit the current RCC structure of stm32-data.
-    if chip_name.starts_with("stm32f4") && !chip_name.starts_with("stm32f410") {
+    if (chip_name.starts_with("stm32f4") && !chip_name.starts_with("stm32f410"))
+        || chip_name.starts_with("stm32f2")
+        || chip_name.starts_with("stm32f7")
+    {
         clock_gen.clock_names.insert("plli2s1_p".to_string());
         clock_gen.clock_names.insert("plli2s1_q".to_string());
         clock_gen.clock_names.insert("plli2s1_r".to_string());
@@ -964,57 +967,7 @@ fn main() {
         }
 
         if cfg!(feature = "gpio-init-analog") && kind == "gpio" {
-            for p in METADATA.peripherals {
-                // set all GPIOs to analog mode except for PA13 and PA14 which are SWDIO and SWDCLK
-                if p.registers.is_some()
-                    && p.registers.as_ref().unwrap().kind == "gpio"
-                    && p.registers.as_ref().unwrap().version != "v1"
-                {
-                    let port = format_ident!("{}", p.name);
-                    if p.name == "GPIOA" {
-                        gg.extend(quote! {
-                            // leave PA13 and PA14 as unchanged
-                            crate::pac::#port.moder().modify(|w| {
-                                w.set_moder(0, crate::pac::gpio::vals::Moder::ANALOG);
-                                w.set_moder(1, crate::pac::gpio::vals::Moder::ANALOG);
-                                w.set_moder(2, crate::pac::gpio::vals::Moder::ANALOG);
-                                w.set_moder(3, crate::pac::gpio::vals::Moder::ANALOG);
-                                w.set_moder(4, crate::pac::gpio::vals::Moder::ANALOG);
-                                w.set_moder(5, crate::pac::gpio::vals::Moder::ANALOG);
-                                w.set_moder(6, crate::pac::gpio::vals::Moder::ANALOG);
-                                w.set_moder(7, crate::pac::gpio::vals::Moder::ANALOG);
-                                w.set_moder(8, crate::pac::gpio::vals::Moder::ANALOG);
-                                w.set_moder(9, crate::pac::gpio::vals::Moder::ANALOG);
-                                w.set_moder(10, crate::pac::gpio::vals::Moder::ANALOG);
-                                w.set_moder(11, crate::pac::gpio::vals::Moder::ANALOG);
-                                w.set_moder(12, crate::pac::gpio::vals::Moder::ANALOG);
-                                w.set_moder(15, crate::pac::gpio::vals::Moder::ANALOG);
-                            });
-                        });
-                    } else {
-                        gg.extend(quote! {
-                            crate::pac::#port.moder().modify(|w| {
-                                w.set_moder(0, crate::pac::gpio::vals::Moder::ANALOG);
-                                w.set_moder(1, crate::pac::gpio::vals::Moder::ANALOG);
-                                w.set_moder(2, crate::pac::gpio::vals::Moder::ANALOG);
-                                w.set_moder(3, crate::pac::gpio::vals::Moder::ANALOG);
-                                w.set_moder(4, crate::pac::gpio::vals::Moder::ANALOG);
-                                w.set_moder(5, crate::pac::gpio::vals::Moder::ANALOG);
-                                w.set_moder(6, crate::pac::gpio::vals::Moder::ANALOG);
-                                w.set_moder(7, crate::pac::gpio::vals::Moder::ANALOG);
-                                w.set_moder(8, crate::pac::gpio::vals::Moder::ANALOG);
-                                w.set_moder(9, crate::pac::gpio::vals::Moder::ANALOG);
-                                w.set_moder(10, crate::pac::gpio::vals::Moder::ANALOG);
-                                w.set_moder(11, crate::pac::gpio::vals::Moder::ANALOG);
-                                w.set_moder(12, crate::pac::gpio::vals::Moder::ANALOG);
-                                w.set_moder(13, crate::pac::gpio::vals::Moder::ANALOG);
-                                w.set_moder(14, crate::pac::gpio::vals::Moder::ANALOG);
-                                w.set_moder(15, crate::pac::gpio::vals::Moder::ANALOG);
-                            });
-                        });
-                    }
-                }
-            }
+            gg.extend(quote! {init_gpio_analog();});
         }
 
         let fname = format_ident!("init_{}", kind);
@@ -1061,6 +1014,7 @@ fn main() {
         (("spi", "I2S_MCK"), quote!(crate::spi::MckPin)),
         (("spi", "I2S_CK"), quote!(crate::spi::CkPin)),
         (("spi", "I2S_WS"), quote!(crate::spi::WsPin)),
+        (("spi", "I2S_SD"), quote!(crate::spi::I2sSdPin)),
         (("i2c", "SDA"), quote!(crate::i2c::SdaPin)),
         (("i2c", "SCL"), quote!(crate::i2c::SclPin)),
         (("rcc", "MCO_1"), quote!(crate::rcc::McoPin)),
@@ -1991,6 +1945,7 @@ fn main() {
 
     let gpio_base = peripheral_map.get("GPIOA").unwrap().address as u32;
     let gpio_stride = 0x400;
+    let mut init_gpio_analog = TokenStream::new();
 
     for pin in METADATA.pins {
         let port_letter = pin.name.chars().nth(1).unwrap();
@@ -2000,6 +1955,12 @@ fn main() {
         let port_num = (p.address as u32 - gpio_base) / gpio_stride;
         let pin_num: u32 = pin.name[2..].parse().unwrap();
 
+        let port_num = if chip_name.starts_with("stm32n6") && port_num > 7 {
+            port_num - 5 // Ports I-M are not present
+        } else {
+            port_num
+        };
+
         pins_table.push(vec![
             pin.name.to_string(),
             p.name.to_string(),
@@ -2007,6 +1968,14 @@ fn main() {
             pin_num.to_string(),
             format!("EXTI{}", pin_num),
         ]);
+
+        // set all GPIOs to analog mode except for PA13 and PA14 which are SWDIO and SWDCLK
+        let pin_port = (port_num * 16 + pin_num) as u8;
+        if pin.name != "PA13" && pin.name != "PA14" {
+            init_gpio_analog.extend(quote! {
+                crate::gpio::set_as_analog(#pin_port);
+            });
+        }
 
         // If we have the split pins, we need to do a little extra work:
         // Add the "_C" variant to the table. The solution is not optimal, though.
@@ -2024,6 +1993,14 @@ fn main() {
                 ]);
             }
         }
+    }
+
+    if cfg!(feature = "gpio-init-analog") {
+        g.extend(quote! {
+            fn init_gpio_analog() {
+                #init_gpio_analog
+            }
+        });
     }
 
     for p in METADATA.peripherals {
@@ -2210,8 +2187,15 @@ fn main() {
     }
 
     g.extend(quote!(
-        pub fn gpio_block(n: usize) -> crate::pac::gpio::Gpio {
-            unsafe { crate::pac::gpio::Gpio::from_ptr((#gpio_base + #gpio_stride*n) as _) }
+        pub const fn gpio_block(port_num: usize) -> crate::pac::gpio::Gpio {
+            #[cfg(stm32n6)]
+            let port_num = if port_num > 7 {
+                port_num + 5 // Ports I-M are not present
+            } else {
+                port_num
+            };
+
+            unsafe { crate::pac::gpio::Gpio::from_ptr((#gpio_base + #gpio_stride*port_num) as _) }
         }
     ));
 

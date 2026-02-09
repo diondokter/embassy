@@ -224,6 +224,8 @@ struct ClocksInput {
     hse: Option<Hertz>,
     pll1: Option<Hertz>,
     pll2: Option<Hertz>,
+    pll3: Option<Hertz>,
+    pll4: Option<Hertz>,
 }
 
 fn init_clocks(config: Config, input: &ClocksInput) -> ClocksOutput {
@@ -388,8 +390,8 @@ fn init_clocks(config: Config, input: &ClocksInput) -> ClocksOutput {
             let src_freq = match source {
                 Icsel::PLL1 => unwrap!(input.pll1),
                 Icsel::PLL2 => unwrap!(input.pll2),
-                Icsel::HSI_OSC_DIV4 => Hertz(unwrap!(input.hsi).0 / 4),
-                Icsel::HSI_OSC_DIV8 => Hertz(unwrap!(input.hsi).0 / 8),
+                Icsel::PLL3 => unwrap!(input.pll3),
+                Icsel::PLL4 => unwrap!(input.pll4),
             };
             let div = (divider.to_bits() as u32) + 1;
             Hertz(src_freq.0 / div)
@@ -404,8 +406,8 @@ fn init_clocks(config: Config, input: &ClocksInput) -> ClocksOutput {
             let src_freq = match ic2.source {
                 Icsel::PLL1 => unwrap!(input.pll1),
                 Icsel::PLL2 => unwrap!(input.pll2),
-                Icsel::HSI_OSC_DIV4 => Hertz(unwrap!(input.hsi).0 / 4),
-                Icsel::HSI_OSC_DIV8 => Hertz(unwrap!(input.hsi).0 / 8),
+                Icsel::PLL3 => unwrap!(input.pll3),
+                Icsel::PLL4 => unwrap!(input.pll4),
             };
             let div = (ic2.divider.to_bits() as u32) + 1;
             Hertz(src_freq.0 / div)
@@ -685,6 +687,19 @@ struct PllOutput {
     output: Option<Hertz>,
 }
 
+fn disable_pll(pll_index: usize) {
+    let cfgr1 = RCC.pllcfgr1(pll_index);
+    let cfgr3 = RCC.pllcfgr3(pll_index);
+
+    cfgr3.modify(|w| w.set_pllpdiven(false));
+    RCC.ccr().write(|w| w.set_pllonc(pll_index, true));
+    // wait till disabled
+    while RCC.sr().read().pllrdy(pll_index) {}
+
+    // clear bypass mode
+    cfgr1.modify(|w| w.set_pllbyp(false));
+}
+
 fn init_pll(pll_config: Option<Pll>, pll_index: usize, input: &PllInput) -> PllOutput {
     let cfgr1 = RCC.pllcfgr1(pll_index);
     let cfgr2 = RCC.pllcfgr2(pll_index);
@@ -796,13 +811,7 @@ fn init_pll(pll_config: Option<Pll>, pll_index: usize, input: &PllInput) -> PllO
             }
         }
         None => {
-            cfgr3.modify(|w| w.set_pllpdiven(false));
-            RCC.ccr().write(|w| w.set_pllonc(pll_index, true));
-            // wait till disabled
-            while RCC.sr().read().pllrdy(pll_index) {}
-
-            // clear bypass mode
-            cfgr1.modify(|w| w.set_pllbyp(false));
+            disable_pll(pll_index);
 
             PllOutput::default()
         }
@@ -1037,7 +1046,13 @@ fn init_osc(config: Config) -> OscOutput {
                 panic!("PLL should not be disabled / reconfigured if used for IC2, IC6 or IC11 (sysclksrc)")
             }
 
-            *out = init_pll(pll, n, &pll_input);
+            *out = pll.map_or_else(
+                || {
+                    disable_pll(n);
+                    PllOutput::default()
+                },
+                |c| init_pll(Some(c), n, &pll_input),
+            );
         } else if pll.is_some() && !pll_ready {
             RCC.csr().write(|w| w.set_pllons(n, true));
             while !RCC.sr().read().pllrdy(n) {}
@@ -1247,6 +1262,8 @@ pub(crate) unsafe fn init(config: Config) {
         hse: osc.hse,
         pll1: osc.pll1,
         pll2: osc.pll2,
+        pll3: osc.pll3,
+        pll4: osc.pll4,
     };
     let clocks = init_clocks(config, &clock_inputs);
 
