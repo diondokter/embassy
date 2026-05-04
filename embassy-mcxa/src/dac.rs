@@ -6,12 +6,11 @@ use super::clocks::PoweredClock;
 use crate::clkout::Div4;
 use crate::clocks::periph_helpers::DacConfig;
 use crate::clocks::{ClockError, Gate, WakeGuard, enable_and_reset};
-use crate::pac::DAC0;
-use crate::peripherals::DAC0;
+use crate::gpio::GpioPin;
 
 pub struct Dac {
-    dac: crate::pac::dac::Dac,
-    _power: sealed::DacPower,
+    regs: crate::pac::dac::Dac,
+    _power: DacPower,
     _wg: Option<WakeGuard>,
 }
 
@@ -20,84 +19,70 @@ pub struct Dac {
 pub enum InitError {
     ClockInit(ClockError),
 }
+
 impl From<ClockError> for InitError {
     fn from(value: ClockError) -> Self {
         InitError::ClockInit(value)
     }
 }
 
-mod sealed {
-    pub struct DacPower {
-        offset: u8,
-    }
+/// Power guard. Sets the given bit in SPC soc_cntrl and resets it on drop
+pub(crate) struct DacPower {
+    bit: u8,
+}
 
-    impl DacPower {
-        pub fn power_on(offset: u8) -> Self {
-            let spc = crate::pac::SPC0;
-            spc.active_cfg1()
-                .modify(|w| w.set_soc_cntrl((1 << offset) | w.soc_cntrl()));
-            spc.lp_cfg1().modify(|w| w.set_soc_cntrl((1 << offset) | w.soc_cntrl()));
-            DacPower { offset }
-        }
+impl DacPower {
+    pub fn power_on(bit: u8) -> Self {
+        let spc = crate::pac::SPC0;
+        spc.active_cfg1()
+            .modify(|w| w.set_soc_cntrl(w.soc_cntrl() | (1 << bit)));
+        spc.lp_cfg1().modify(|w| w.set_soc_cntrl(w.soc_cntrl() | (1 << bit)));
+        DacPower { bit }
     }
+}
 
-    impl Drop for DacPower {
-        fn drop(&mut self) {
-            let spc = crate::pac::SPC0;
-            spc.active_cfg1()
-                .modify(|w| w.set_soc_cntrl((0 << self.offset) | w.soc_cntrl()));
-            spc.lp_cfg1()
-                .modify(|w| w.set_soc_cntrl((0 << self.offset) | w.soc_cntrl()));
-        }
+impl Drop for DacPower {
+    fn drop(&mut self) {
+        let spc = crate::pac::SPC0;
+        spc.active_cfg1()
+            .modify(|w| w.set_soc_cntrl(w.soc_cntrl() & !(1 << self.bit)));
+        spc.lp_cfg1()
+            .modify(|w| w.set_soc_cntrl(w.soc_cntrl() & !(1 << self.bit)));
     }
+}
 
+pub(crate) mod sealed {
     pub trait SealedPin {}
+
     pub trait SealedInstance {
-        fn power_on() -> DacPower;
-        fn dac() -> crate::pac::dac::Dac;
+        const SOC_CNTRL_BIT: u8;
+        fn regs() -> crate::pac::dac::Dac;
     }
 }
 
 pub trait Instance: sealed::SealedInstance + PeripheralType + Gate<MrccPeriphConfig = DacConfig> {}
-pub trait DacPin: sealed::SealedPin + PeripheralType {
-    type Instance: Instance;
-}
-
-impl Instance for crate::peripherals::DAC0 {}
-impl sealed::SealedInstance for crate::peripherals::DAC0 {
-    fn power_on() -> sealed::DacPower {
-        sealed::DacPower::power_on(4)
-    }
-    fn dac() -> crate::pac::dac::Dac {
-        crate::pac::DAC0
-    }
-}
-
-impl DacPin for crate::peripherals::P2_2 {
-    type Instance = DAC0;
-}
-impl sealed::SealedPin for crate::peripherals::P2_2 {}
+pub trait DacPin<Instance>: sealed::SealedPin + GpioPin {}
 
 impl Dac {
     /// Create a dac instance.
-    pub fn new<P: DacPin + crate::gpio::GpioPin>(
-        _instance: Peri<'static, P::Instance>,
-        pin: Peri<'static, P>,
+    pub fn new<P: Instance>(
+        _instance: Peri<'static, P>,
+        pin: Peri<'static, impl DacPin<P>>,
     ) -> Result<Self, InitError> {
         let clock = unsafe {
-            enable_and_reset::<P::Instance>(&DacConfig {
+            enable_and_reset::<P>(&DacConfig {
                 div: Div4::no_div(),
                 power: PoweredClock::AlwaysEnabled,
             })?
         };
-        let power = <P::Instance as sealed::SealedInstance>::power_on();
+        let power = DacPower::power_on(<P as sealed::SealedInstance>::SOC_CNTRL_BIT);
 
         pin.set_pull(crate::gpio::Pull::Disabled);
         pin.set_slew_rate(crate::gpio::SlewRate::Fast.into());
         pin.set_drive_strength(crate::gpio::DriveStrength::Normal.into());
         pin.set_function(Mux::Mux0);
 
-        let dac = <P::Instance as sealed::SealedInstance>::dac();
+        let dac = <P as sealed::SealedInstance>::regs();
 
         dac.rcr().modify(|w| {
             w.set_swrst(Swrst::SoftwareReset);
@@ -121,7 +106,7 @@ impl Dac {
         Ok(Self {
             _wg: clock.wake_guard,
             _power: power,
-            dac,
+            regs: dac,
         })
     }
 
@@ -130,13 +115,39 @@ impl Dac {
     /// The output value can be between 0 and 4095.
     /// The voltage produced will be value/4095*Vref.
     pub fn write(&self, value: u16) {
-        let dac0 = DAC0;
-        dac0.data().write(|w| w.set_data(value));
+        self.regs.data().write(|w| w.set_data(value));
     }
 }
 
 impl Drop for Dac {
     fn drop(&mut self) {
-        self.dac.gcr().write(|w| w.set_dacen(false));
+        self.regs.gcr().write(|w| w.set_dacen(false));
     }
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! impl_dac_instance {
+    ($n:literal) => {
+        paste::paste! {
+            impl crate::dac::sealed::SealedInstance for crate::peripherals::[<DAC $n>] {
+                const SOC_CNTRL_BIT: u8 = 4 + $n;
+
+                fn regs() -> crate::pac::dac::Dac {
+                    crate::pac::[<DAC $n>]
+                }
+            }
+
+            impl crate::dac::Instance for crate::peripherals::[<DAC $n>] {}
+        }
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! impl_dac_pin {
+    ($pin:ident, $peri:ident) => {
+        impl crate::dac::sealed::SealedPin for crate::peripherals::$pin {}
+        impl crate::dac::DacPin<crate::peripherals::$peri> for crate::peripherals::$pin {}
+    };
 }
