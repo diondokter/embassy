@@ -207,18 +207,6 @@ impl SPConfHelper for Clk1MConfig {
     }
 }
 
-/// Placeholder configuration for the DAC peripheral.
-///
-/// The DAC HAL driver is not yet implemented, but the PAC metadata
-/// declares the gate config type, so we provide a stub here. Replace
-/// with the real implementation when the DAC driver is added.
-pub struct DacConfig;
-impl SPConfHelper for DacConfig {
-    fn pre_enable_config(&self, _clocks: &Clocks) -> Result<PreEnableParts, ClockError> {
-        Ok(PreEnableParts::empty())
-    }
-}
-
 //
 // Adc
 //
