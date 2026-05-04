@@ -28,13 +28,11 @@ use embassy_stm32::peripherals::RNG;
 use embassy_stm32::rng::{self, Rng};
 use embassy_stm32::time::Hertz;
 use embassy_stm32::{Config, bind_interrupts, exti, interrupt};
-use embassy_stm32_wpan::bluetooth::ble::Ble;
-use embassy_stm32_wpan::bluetooth::hci::command::{le_receiver_test, le_test_end, le_transmitter_test};
+use embassy_stm32_wpan::bluetooth::HCI;
 use embassy_stm32_wpan::bluetooth::hci::types::DtmPacketPayload;
-use embassy_stm32_wpan::{ChannelPacket, Controller, HighInterruptHandler, LowInterruptHandler};
+use embassy_stm32_wpan::{HighInterruptHandler, LowInterruptHandler, new_controller_state};
 use embassy_sync::blocking_mutex::Mutex;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::zerocopy_channel;
 use embassy_time::Timer;
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
@@ -123,21 +121,10 @@ async fn main(_spawner: Spawner) {
 
     info!("Hardware peripherals initialized (RNG)");
 
-    // Create BLE Event Channel
-    static EVENT_BUFFER: StaticCell<[ChannelPacket; 8]> = StaticCell::new();
-    static EVENT_CHANNEL: StaticCell<zerocopy_channel::Channel<'static, CriticalSectionRawMutex, ChannelPacket>> =
-        StaticCell::new();
-
-    let event_channel = EVENT_CHANNEL.init(zerocopy_channel::Channel::new(
-        EVENT_BUFFER.init([ChannelPacket::default(); 8]),
-    ));
-
     // Initialize BLE stack
-    let controller = Controller::new(event_channel, rng, None, None, Irqs)
+    let mut dtm_ble = HCI::new_dtm(new_controller_state!(8), rng, Irqs)
         .await
         .expect("BLE initialization failed");
-
-    let mut ble = Ble::new_dtm(controller).unwrap();
 
     // DTM packet interval is 625 µs (1 BLE slot) per Vol 6, Part F, Section 4.1.6.
     // Expected packets = duration_s × (1_000_000 µs/s ÷ 625 µs/packet) = duration_s × 1600.
@@ -157,12 +144,13 @@ async fn main(_spawner: Spawner) {
                 expected, DTM_TEST_DURATION_SECS
             );
 
-            le_transmitter_test(&mut ble, DTM_CHANNEL, DTM_DATA_LENGTH, DtmPacketPayload::Prbs9)
+            dtm_ble
+                .dtm_transmit(DTM_CHANNEL, DTM_DATA_LENGTH, DtmPacketPayload::Prbs9)
                 .expect("DTM TX start failed");
 
             Timer::after_secs(DTM_TEST_DURATION_SECS).await;
 
-            match le_test_end() {
+            match dtm_ble.dtm_end() {
                 Ok(_) => info!("DTM TX test ended after {}s", DTM_TEST_DURATION_SECS),
                 Err(e) => error!("le_test_end failed: {:?}", e),
             }
@@ -179,11 +167,11 @@ async fn main(_spawner: Spawner) {
                 expected, DTM_TEST_DURATION_SECS
             );
 
-            le_receiver_test(&mut ble, DTM_CHANNEL).expect("DTM RX start failed");
+            dtm_ble.dtm_receive(DTM_CHANNEL).expect("DTM RX start failed");
 
             Timer::after_secs(DTM_TEST_DURATION_SECS).await;
 
-            match le_test_end() {
+            match dtm_ble.dtm_end() {
                 Ok(received) => {
                     let received = received as u32;
                     // Packet Error Rate = lost / expected × 100
