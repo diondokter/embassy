@@ -52,10 +52,13 @@ impl Drop for DacPower {
 }
 
 pub(crate) mod sealed {
+    use crate::clocks::periph_helpers::DacInstance;
+
     pub trait SealedPin {}
 
     pub trait SealedInstance {
         const SOC_CNTRL_BIT: u8;
+        const INSTANCE: DacInstance;
         fn regs() -> crate::pac::dac::Dac;
     }
 }
@@ -73,6 +76,7 @@ impl Dac {
             enable_and_reset::<P>(&DacConfig {
                 div: Div4::no_div(),
                 power: PoweredClock::AlwaysEnabled,
+                instance: P::INSTANCE,
             })?
         };
         let power = DacPower::power_on(<P as sealed::SealedInstance>::SOC_CNTRL_BIT);
@@ -132,6 +136,7 @@ macro_rules! impl_dac_instance {
         paste::paste! {
             impl crate::dac::sealed::SealedInstance for crate::peripherals::[<DAC $n>] {
                 const SOC_CNTRL_BIT: u8 = 4 + $n;
+                const INSTANCE: crate::clocks::periph_helpers::DacInstance = crate::clocks::periph_helpers::DacInstance::[<Dac $n>];
 
                 fn regs() -> crate::pac::dac::Dac {
                     crate::pac::[<DAC $n>]
