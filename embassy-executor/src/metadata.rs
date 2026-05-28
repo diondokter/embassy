@@ -8,9 +8,9 @@ use core::task::Poll;
 #[cfg(feature = "metadata-name")]
 use critical_section::Mutex;
 
-use crate::raw;
 #[cfg(feature = "scheduler-deadline")]
 use crate::raw::Deadline;
+use crate::raw::{self, TaskRef};
 
 /// Metadata associated with a task.
 pub struct Metadata {
@@ -36,9 +36,41 @@ impl Metadata {
         }
     }
 
+    /// Get this task's name
+    ///
+    /// NOTE: this takes a critical section.
+    #[cfg(feature = "metadata-name")]
+    pub fn name(&self) -> Option<&'static str> {
+        critical_section::with(|cs| self.name.borrow(cs).get())
+    }
+
+    /// Get this task's priority.
+    #[cfg(feature = "scheduler-priority")]
+    pub fn priority(&self) -> u8 {
+        self.priority.load(Ordering::Relaxed)
+    }
+
+    /// Get this task's deadline.
+    #[cfg(feature = "scheduler-deadline")]
+    pub fn deadline(&self) -> u64 {
+        self.deadline.instant_ticks()
+    }
+}
+
+/// A handle to the metadata of a specific task
+pub struct MetadataHandle<'a> {
+    owner: TaskRef,
+    metadata: &'a Metadata,
+}
+
+impl<'a> MetadataHandle<'a> {
+    pub(crate) const fn new(owner: TaskRef, metadata: &'a Metadata) -> Self {
+        Self { owner, metadata }
+    }
+
     pub(crate) fn reset(&self) {
         #[cfg(feature = "metadata-name")]
-        critical_section::with(|cs| self.name.borrow(cs).set(None));
+        critical_section::with(|cs| self.metadata.name.borrow(cs).set(None));
 
         #[cfg(feature = "scheduler-priority")]
         self.set_priority(0);
@@ -55,7 +87,7 @@ impl Metadata {
     ///
     /// This function is `async` just to get access to the current async
     /// context. It returns instantly, it does not block/yield.
-    pub fn for_current_task() -> impl Future<Output = &'static Self> {
+    pub fn for_current_task() -> impl Future<Output = Self> {
         poll_fn(|cx| Poll::Ready(raw::task_from_waker(cx.waker()).metadata()))
     }
 
@@ -64,7 +96,7 @@ impl Metadata {
     /// NOTE: this takes a critical section.
     #[cfg(feature = "metadata-name")]
     pub fn name(&self) -> Option<&'static str> {
-        critical_section::with(|cs| self.name.borrow(cs).get())
+        self.metadata.name()
     }
 
     /// Set this task's name
@@ -72,25 +104,25 @@ impl Metadata {
     /// NOTE: this takes a critical section.
     #[cfg(feature = "metadata-name")]
     pub fn set_name(&self, name: &'static str) {
-        critical_section::with(|cs| self.name.borrow(cs).set(Some(name)))
+        critical_section::with(|cs| self.metadata.name.borrow(cs).set(Some(name)))
     }
 
     /// Get this task's priority.
     #[cfg(feature = "scheduler-priority")]
     pub fn priority(&self) -> u8 {
-        self.priority.load(Ordering::Relaxed)
+        self.metadata.priority()
     }
 
     /// Set this task's priority.
     #[cfg(feature = "scheduler-priority")]
     pub fn set_priority(&self, priority: u8) {
-        self.priority.store(priority, Ordering::Relaxed)
+        self.metadata.priority.store(priority, Ordering::Relaxed)
     }
 
     /// Get this task's deadline.
     #[cfg(feature = "scheduler-deadline")]
     pub fn deadline(&self) -> u64 {
-        self.deadline.instant_ticks()
+        self.metadata.deadline()
     }
 
     /// Set this task's deadline.
@@ -98,14 +130,14 @@ impl Metadata {
     /// This method does NOT check whether the deadline has already passed.
     #[cfg(feature = "scheduler-deadline")]
     pub fn set_deadline(&self, instant_ticks: u64) {
-        self.deadline.set(instant_ticks);
+        self.metadata.deadline.set(instant_ticks);
     }
 
     /// Remove this task's deadline.
     /// This brings it back to the defaul where it's not scheduled ahead of other tasks.
     #[cfg(feature = "scheduler-deadline")]
     pub fn unset_deadline(&self) {
-        self.deadline.set(Deadline::UNSET_TICKS);
+        self.metadata.deadline.set(Deadline::UNSET_TICKS);
     }
 
     /// Set this task's deadline `duration_ticks` in the future from when

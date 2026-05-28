@@ -51,7 +51,7 @@ use self::util::{SyncUnsafeCell, UninitCell};
 pub use self::waker::task_from_waker;
 use self::waker::try_task_from_waker;
 use super::SpawnToken;
-use crate::{Metadata, SpawnError};
+use crate::{Metadata, MetadataHandle, SpawnError};
 
 #[unsafe(no_mangle)]
 extern "Rust" fn __embassy_time_queue_item_from_waker(waker: &Waker) -> &'static mut TimerQueueItem {
@@ -145,8 +145,9 @@ impl TaskRef {
         unsafe { self.ptr.as_ref() }
     }
 
-    pub(crate) fn metadata(self) -> &'static Metadata {
-        unsafe { &self.ptr.as_ref().metadata }
+    pub(crate) fn metadata(self) -> MetadataHandle<'static> {
+        let metadata = unsafe { &self.ptr.as_ref().metadata };
+        MetadataHandle::new(self, metadata)
     }
 
     /// Returns a reference to the executor that the task is currently running on.
@@ -301,7 +302,7 @@ impl<F: Future + 'static> AvailableTask<F> {
 
     fn initialize_impl<S>(self, future: impl FnOnce() -> F) -> SpawnToken<S> {
         unsafe {
-            self.task.raw.metadata.reset();
+            TaskRef::new(self.task).metadata().reset();
             self.task.raw.poll_fn.set(Some(TaskStorage::<F>::poll));
             self.task.future.write_in_place(future);
 
